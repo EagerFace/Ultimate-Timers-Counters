@@ -38,8 +38,8 @@ tasks.register('run', JavaExec) {
 	classpath = sourceSets.test.runtimeClasspath
 	mainClass = pluginMainClass
 
-	jvmArgs "-ea"
-	args "--developer-mode", "--debug"
+	jvmArgs "-ea", "-Xmx768m", "-Xss2m", "-XX:CompileThreshold=1500", "-Dsun.java2d.opengl=false"
+	args "--developer-mode"
 }
 
 tasks.register('shadowJar', Jar) {
