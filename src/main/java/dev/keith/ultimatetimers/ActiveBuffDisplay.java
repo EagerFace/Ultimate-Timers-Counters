@@ -1,4 +1,4 @@
-package dev.keith.buffrings;
+package dev.keith.ultimatetimers;
 
 import java.awt.Color;
 import java.awt.image.BufferedImage;

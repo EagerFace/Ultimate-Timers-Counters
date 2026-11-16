@@ -1,4 +1,4 @@
-package dev.keith.buffrings;
+package dev.keith.ultimatetimers;
 
 import net.runelite.api.gameval.ItemID;
 import net.runelite.api.gameval.SpriteID;
@@ -6,7 +6,7 @@ import net.runelite.api.gameval.SpriteID;
 /**
  * Each entry's gameTimerName must exactly match the name of the corresponding (package-private)
  * net.runelite.client.plugins.timersandbuffs.GameTimer enum constant - that's how
- * BuffRingsPlugin finds the right already-computed net.runelite.client.ui.overlay.infobox.Timer
+ * UltimateTimersPlugin finds the right already-computed net.runelite.client.ui.overlay.infobox.Timer
  * to read, rather than re-deriving each buff's remaining duration itself. Icons are likewise
  * copied from whatever GameTimer uses for that same entry (item icon or interface sprite).
  */
@@ -100,7 +100,7 @@ enum TrackedBuff
 	 * ticks later. RuneLite's core Timers & Buffs plugin doesn't track this at all - only the
 	 * separate "Consumable Cooldowns" hub plugin does, and even that one doesn't expose a
 	 * readable end time (its timer extends raw InfoBox, not Timer, with no public tick-count
-	 * getter). Tracked manually instead (see BuffRingsPlugin's MenuOptionClicked listener).
+	 * getter). Tracked manually instead (see UltimateTimersPlugin's MenuOptionClicked listener).
 	 */
 	DELAYED_HEAL(Category.DELAYED_HEAL, Kind.OTHER_TIMER, "Delayed Heal", Icon.item(ItemID.ANTELOPEMOON_COOKED)),
 
@@ -109,7 +109,7 @@ enum TrackedBuff
 	 * straight from the same varps the core Slayer plugin itself reads (VarPlayerID.SLAYER_COUNT/
 	 * SLAYER_COUNT_ORIGINAL) - no reimplementation of task tracking here. The per-task monster
 	 * icon is a different story: Slayer's own name->icon mapping (the Task enum) is
-	 * package-private, so instead of re-deriving that whole table ourselves, BuffRingsPlugin
+	 * package-private, so instead of re-deriving that whole table ourselves, UltimateTimersPlugin
 	 * grabs the icon already loaded into Slayer's own infobox (InfoBox.getImage(), matched by
 	 * InfoBox.getName() == "SlayerPlugin_TaskCounter") - the same "read what's already computed"
 	 * approach used for the Timers & Buffs integration. That requires the Slayer plugin's "Show
@@ -210,7 +210,7 @@ enum TrackedBuff
 
 	/**
 	 * Which top-level flash/linger setting group applies to this timer. COUNTER is the exception:
-	 * it has no flash/linger settings of its own at all (see BuffRingsPlugin/BuffRingsGroupOverlay).
+	 * it has no flash/linger settings of its own at all (see UltimateTimersPlugin/UltimateTimersGroupOverlay).
 	 */
 	enum Kind
 	{

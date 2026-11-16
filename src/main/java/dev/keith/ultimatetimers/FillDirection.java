@@ -1,4 +1,4 @@
-package dev.keith.buffrings;
+package dev.keith.ultimatetimers;
 
 /** Which way the depleting edge of the foreground moves as a ring counts down. */
 public enum FillDirection

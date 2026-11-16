@@ -1,4 +1,4 @@
-package dev.keith.buffrings;
+package dev.keith.ultimatetimers;
 
 import java.awt.Color;
 import net.runelite.client.config.Alpha;
@@ -9,10 +9,10 @@ import net.runelite.client.config.ConfigSection;
 import net.runelite.client.config.FontType;
 import net.runelite.client.config.Range;
 
-@ConfigGroup(BuffRingsConfig.GROUP)
-public interface BuffRingsConfig extends Config
+@ConfigGroup(UltimateTimersConfig.GROUP)
+public interface UltimateTimersConfig extends Config
 {
-	String GROUP = "buffrings";
+	String GROUP = "ultimatetimers";
 
 	@ConfigSection(
 		name = "Buffs",

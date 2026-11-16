@@ -1,13 +1,13 @@
-package dev.keith.buffrings;
+package dev.keith.ultimatetimers;
 
 import net.runelite.client.RuneLite;
 import net.runelite.client.externalplugins.ExternalPluginManager;
 
-public class BuffRingsPluginTest
+public class UltimateTimersPluginTest
 {
 	public static void main(String[] args) throws Exception
 	{
-		ExternalPluginManager.loadBuiltin(BuffRingsPlugin.class);
+		ExternalPluginManager.loadBuiltin(UltimateTimersPlugin.class);
 		RuneLite.main(args);
 	}
 }

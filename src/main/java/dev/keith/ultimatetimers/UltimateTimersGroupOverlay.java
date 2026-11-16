@@ -1,4 +1,4 @@
-package dev.keith.buffrings;
+package dev.keith.ultimatetimers;
 
 import java.awt.BasicStroke;
 import java.awt.Color;
@@ -38,7 +38,7 @@ import net.runelite.client.ui.overlay.tooltip.TooltipManager;
  * group to Detach it into its own new group - all without the size/background/tick-rate
  * limitations that come from actually registering as net.runelite.client.ui.overlay.infobox.InfoBox.
  */
-public class BuffRingsGroupOverlay extends Overlay
+public class UltimateTimersGroupOverlay extends Overlay
 {
 	private static final int ELEMENT_GAP = 2;
 	private static final int TEXT_STYLE_OFFSET = 1;
@@ -87,15 +87,15 @@ public class BuffRingsGroupOverlay extends Overlay
 		}
 	}
 
-	private final BuffRingsPlugin plugin;
-	private final BuffRingsConfig config;
+	private final UltimateTimersPlugin plugin;
+	private final UltimateTimersConfig config;
 	private final Client client;
 	private final TooltipManager tooltipManager;
 	private final String groupName;
 
 	private TrackedBuff hoveredBuff;
 
-	BuffRingsGroupOverlay(BuffRingsPlugin plugin, BuffRingsConfig config, Client client,
+	UltimateTimersGroupOverlay(UltimateTimersPlugin plugin, UltimateTimersConfig config, Client client,
 		TooltipManager tooltipManager, String groupName)
 	{
 		this.plugin = plugin;
@@ -121,7 +121,7 @@ public class BuffRingsGroupOverlay extends Overlay
 	@Override
 	public String getName()
 	{
-		return "BuffRingsGroup_" + groupName;
+		return "UltimateTimersGroup_" + groupName;
 	}
 
 	@Override
@@ -468,12 +468,12 @@ public class BuffRingsGroupOverlay extends Overlay
 	@Override
 	public boolean onDrag(Overlay source)
 	{
-		if (!(source instanceof BuffRingsGroupOverlay) || source == this)
+		if (!(source instanceof UltimateTimersGroupOverlay) || source == this)
 		{
 			return false;
 		}
 
-		plugin.mergeGroups(((BuffRingsGroupOverlay) source).getGroupName(), groupName);
+		plugin.mergeGroups(((UltimateTimersGroupOverlay) source).getGroupName(), groupName);
 		return true;
 	}
 

@@ -1,4 +1,4 @@
-package dev.keith.buffrings;
+package dev.keith.ultimatetimers;
 
 /**
  * Where to draw an element (the remaining-time text, or the potion icon) relative to its ring.

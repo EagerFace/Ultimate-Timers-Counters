@@ -1,4 +1,4 @@
-package dev.keith.buffrings;
+package dev.keith.ultimatetimers;
 
 import com.google.inject.Provides;
 import java.awt.Color;
@@ -49,14 +49,14 @@ import net.runelite.client.util.AsyncBufferedImage;
 		"prayer", "thrall", "freeze", "necromancy", "overload", "vengeance", "teleblock", "slayer", "boss", "afk",
 		"overlay"}
 )
-public class BuffRingsPlugin extends Plugin
+public class UltimateTimersPlugin extends Plugin
 {
 	static final String DEFAULT_GROUP = "default";
 
 	private static final Color FALLBACK_COLOR = new Color(170, 170, 170);
-	private static final String GROUP_ASSIGNMENT_CONFIG_GROUP = "buffringsgroupassignment";
-	private static final String GROUP_LAYOUT_CONFIG_GROUP = "buffringsgrouplayout";
-	private static final String ORDER_CONFIG_GROUP = "buffringsorder";
+	private static final String GROUP_ASSIGNMENT_CONFIG_GROUP = "ultimatetimersgroupassignment";
+	private static final String GROUP_LAYOUT_CONFIG_GROUP = "ultimatetimersgrouplayout";
+	private static final String ORDER_CONFIG_GROUP = "ultimatetimersorder";
 
 	/**
 	 * Divine potions that combine multiple effects also set the varbits for each individual
@@ -94,7 +94,7 @@ public class BuffRingsPlugin extends Plugin
 	private static final String SLAYER_TASK_INFOBOX_NAME = "SlayerPlugin_TaskCounter";
 
 	@Inject
-	private BuffRingsConfig config;
+	private UltimateTimersConfig config;
 
 	@Inject
 	private ItemManager itemManager;
@@ -124,23 +124,24 @@ public class BuffRingsPlugin extends Plugin
 	private final Map<TrackedBuff, Integer> manualTicks = new EnumMap<>(TrackedBuff.class);
 	private final Map<TrackedBuff, String> buffGroup = new EnumMap<>(TrackedBuff.class);
 	private final Map<TrackedBuff, Integer> buffOrder = new EnumMap<>(TrackedBuff.class);
-	private final Map<String, BuffRingsGroupOverlay> groupOverlays = new HashMap<>();
+	private final Map<String, UltimateTimersGroupOverlay> groupOverlays = new HashMap<>();
 	private final Map<String, List<ActiveBuffDisplay>> displaysByGroup = new HashMap<>();
 
 	@Override
 	protected void startUp()
 	{
+		migrateProjectRename();
 		migrateRingDiameter();
 		migrateTeleportColor();
 		migrateSplitCategories();
 		migrateRingShape();
-		configManager.unsetConfiguration(BuffRingsConfig.GROUP, "sizePreset");
-		configManager.unsetConfiguration(BuffRingsConfig.GROUP, "lockAspectRatio");
-		configManager.unsetConfiguration(BuffRingsConfig.GROUP, "debugShowBuffs");
-		configManager.unsetConfiguration(BuffRingsConfig.GROUP, "debugShowDebuffs");
-		configManager.unsetConfiguration(BuffRingsConfig.GROUP, "debugShowCooldowns");
-		configManager.unsetConfiguration(BuffRingsConfig.GROUP, "debugShowOtherTimers");
-		configManager.unsetConfiguration(BuffRingsConfig.GROUP, "debugShowCounters");
+		configManager.unsetConfiguration(UltimateTimersConfig.GROUP, "sizePreset");
+		configManager.unsetConfiguration(UltimateTimersConfig.GROUP, "lockAspectRatio");
+		configManager.unsetConfiguration(UltimateTimersConfig.GROUP, "debugShowBuffs");
+		configManager.unsetConfiguration(UltimateTimersConfig.GROUP, "debugShowDebuffs");
+		configManager.unsetConfiguration(UltimateTimersConfig.GROUP, "debugShowCooldowns");
+		configManager.unsetConfiguration(UltimateTimersConfig.GROUP, "debugShowOtherTimers");
+		configManager.unsetConfiguration(UltimateTimersConfig.GROUP, "debugShowCounters");
 
 		peakMillis.clear();
 		expiredAtMillis.clear();
@@ -207,27 +208,82 @@ public class BuffRingsPlugin extends Plugin
 	}
 
 	/**
+	 * The plugin/project was renamed from "Buff Rings" to "Ultimate Timers & Counters" - its
+	 * config group, two per-buff bookkeeping groups (group assignment/order), the group-layout
+	 * group, and each overlay's own persisted position/size (keyed off Overlay.getName(), which
+	 * used to start with "BuffRingsGroup_") all used the old "buffrings"-based names. Carries over
+	 * every key in each old group/prefix to its new counterpart the first time this version
+	 * starts; each copy loop naturally only runs once since the old group/prefix is empty after.
+	 */
+	private void migrateProjectRename()
+	{
+		migrateConfigGroup("buffrings", UltimateTimersConfig.GROUP);
+		migrateConfigGroup("buffringsgroupassignment", GROUP_ASSIGNMENT_CONFIG_GROUP);
+		migrateConfigGroup("buffringsgrouplayout", GROUP_LAYOUT_CONFIG_GROUP);
+		migrateConfigGroup("buffringsorder", ORDER_CONFIG_GROUP);
+		migrateKeyPrefix("runelite", "BuffRingsGroup_", "UltimateTimersGroup_");
+
+		// RuneLite's own "is this plugin enabled" flag is keyed by the plugin class's simple name,
+		// lowercased - renaming the class means a stale "buffringsplugin" flag would otherwise
+		// leave the renamed plugin disabled by default for anyone who had it enabled before.
+		String wasEnabled = configManager.getConfiguration("runelite", "buffringsplugin");
+		if (wasEnabled != null)
+		{
+			configManager.setConfiguration("runelite", "ultimatetimersplugin", wasEnabled);
+			configManager.unsetConfiguration("runelite", "buffringsplugin");
+		}
+	}
+
+	private void migrateConfigGroup(String oldGroup, String newGroup)
+	{
+		for (String wholeKey : configManager.getConfigurationKeys(oldGroup + "."))
+		{
+			String key = wholeKey.substring(oldGroup.length() + 1);
+			String value = configManager.getConfiguration(oldGroup, key);
+			if (value != null)
+			{
+				configManager.setConfiguration(newGroup, key, value);
+			}
+			configManager.unsetConfiguration(oldGroup, key);
+		}
+	}
+
+	private void migrateKeyPrefix(String group, String oldPrefix, String newPrefix)
+	{
+		for (String wholeKey : configManager.getConfigurationKeys(group + "." + oldPrefix))
+		{
+			String rest = wholeKey.substring(group.length() + 1 + oldPrefix.length());
+			String value = configManager.getConfiguration(group, oldPrefix + rest);
+			if (value != null)
+			{
+				configManager.setConfiguration(group, newPrefix + rest, value);
+			}
+			configManager.unsetConfiguration(group, oldPrefix + rest);
+		}
+	}
+
+	/**
 	 * The single "ringDiameter" setting was replaced by independent "ringWidth"/"ringHeight"
 	 * settings. Carry over anyone's existing saved diameter into both new keys the first time
 	 * this version starts, then remove the old key so this only ever runs once.
 	 */
 	private void migrateRingDiameter()
 	{
-		String oldDiameter = configManager.getConfiguration(BuffRingsConfig.GROUP, "ringDiameter");
+		String oldDiameter = configManager.getConfiguration(UltimateTimersConfig.GROUP, "ringDiameter");
 		if (oldDiameter == null)
 		{
 			return;
 		}
 
-		if (configManager.getConfiguration(BuffRingsConfig.GROUP, "ringWidth") == null)
+		if (configManager.getConfiguration(UltimateTimersConfig.GROUP, "ringWidth") == null)
 		{
-			configManager.setConfiguration(BuffRingsConfig.GROUP, "ringWidth", oldDiameter);
+			configManager.setConfiguration(UltimateTimersConfig.GROUP, "ringWidth", oldDiameter);
 		}
-		if (configManager.getConfiguration(BuffRingsConfig.GROUP, "ringHeight") == null)
+		if (configManager.getConfiguration(UltimateTimersConfig.GROUP, "ringHeight") == null)
 		{
-			configManager.setConfiguration(BuffRingsConfig.GROUP, "ringHeight", oldDiameter);
+			configManager.setConfiguration(UltimateTimersConfig.GROUP, "ringHeight", oldDiameter);
 		}
-		configManager.unsetConfiguration(BuffRingsConfig.GROUP, "ringDiameter");
+		configManager.unsetConfiguration(UltimateTimersConfig.GROUP, "ringDiameter");
 	}
 
 	/**
@@ -238,21 +294,21 @@ public class BuffRingsPlugin extends Plugin
 	 */
 	private void migrateTeleportColor()
 	{
-		String oldColor = configManager.getConfiguration(BuffRingsConfig.GROUP, "teleportColor");
+		String oldColor = configManager.getConfiguration(UltimateTimersConfig.GROUP, "teleportColor");
 		if (oldColor == null)
 		{
 			return;
 		}
 
-		if (configManager.getConfiguration(BuffRingsConfig.GROUP, "homeTeleportColor") == null)
+		if (configManager.getConfiguration(UltimateTimersConfig.GROUP, "homeTeleportColor") == null)
 		{
-			configManager.setConfiguration(BuffRingsConfig.GROUP, "homeTeleportColor", oldColor);
+			configManager.setConfiguration(UltimateTimersConfig.GROUP, "homeTeleportColor", oldColor);
 		}
-		if (configManager.getConfiguration(BuffRingsConfig.GROUP, "minigameTeleportColor") == null)
+		if (configManager.getConfiguration(UltimateTimersConfig.GROUP, "minigameTeleportColor") == null)
 		{
-			configManager.setConfiguration(BuffRingsConfig.GROUP, "minigameTeleportColor", oldColor);
+			configManager.setConfiguration(UltimateTimersConfig.GROUP, "minigameTeleportColor", oldColor);
 		}
-		configManager.unsetConfiguration(BuffRingsConfig.GROUP, "teleportColor");
+		configManager.unsetConfiguration(UltimateTimersConfig.GROUP, "teleportColor");
 	}
 
 	/**
@@ -263,18 +319,18 @@ public class BuffRingsPlugin extends Plugin
 	 */
 	private void migrateRingShape()
 	{
-		String oldShape = configManager.getConfiguration(BuffRingsConfig.GROUP, "ringShape");
+		String oldShape = configManager.getConfiguration(UltimateTimersConfig.GROUP, "ringShape");
 		if (oldShape == null)
 		{
 			return;
 		}
 
-		if (configManager.getConfiguration(BuffRingsConfig.GROUP, "cornerRadius") == null)
+		if (configManager.getConfiguration(UltimateTimersConfig.GROUP, "cornerRadius") == null)
 		{
-			configManager.setConfiguration(BuffRingsConfig.GROUP, "cornerRadius",
+			configManager.setConfiguration(UltimateTimersConfig.GROUP, "cornerRadius",
 				"SQUARE".equals(oldShape) ? "0" : "100");
 		}
-		configManager.unsetConfiguration(BuffRingsConfig.GROUP, "ringShape");
+		configManager.unsetConfiguration(UltimateTimersConfig.GROUP, "ringShape");
 	}
 
 	/**
@@ -290,18 +346,18 @@ public class BuffRingsPlugin extends Plugin
 		// own toggle/color, so the old keys are no longer read anywhere and can be unset.
 		copyToUnsetKeys("showCombatEffect",
 			"showVengeance", "showTeleblock", "showHealGroup", "showCharge", "showSpellbookSwap");
-		configManager.unsetConfiguration(BuffRingsConfig.GROUP, "showCombatEffect");
+		configManager.unsetConfiguration(UltimateTimersConfig.GROUP, "showCombatEffect");
 		copyToUnsetKeys("combatEffectColor",
 			"vengeanceColor", "teleblockColor", "healGroupColor", "chargeColor", "spellbookSwapColor");
-		configManager.unsetConfiguration(BuffRingsConfig.GROUP, "combatEffectColor");
+		configManager.unsetConfiguration(UltimateTimersConfig.GROUP, "combatEffectColor");
 
 		// "showEquipment"/"equipmentColor" were likewise removed entirely.
 		copyToUnsetKeys("showEquipment",
 			"showCannon", "showStaffOfTheDead", "showDragonfireShield", "showSmouldering");
-		configManager.unsetConfiguration(BuffRingsConfig.GROUP, "showEquipment");
+		configManager.unsetConfiguration(UltimateTimersConfig.GROUP, "showEquipment");
 		copyToUnsetKeys("equipmentColor",
 			"cannonColor", "staffOfTheDeadColor", "dragonfireShieldColor", "smoulderingColor");
-		configManager.unsetConfiguration(BuffRingsConfig.GROUP, "equipmentColor");
+		configManager.unsetConfiguration(UltimateTimersConfig.GROUP, "equipmentColor");
 
 		// "showBossMechanic"/"bossMechanicColor" are still live settings (Abyssal Sire/Scurrius/
 		// GWA stayed under them) - only pickpocket stun was carved out, so just seed its new
@@ -312,7 +368,7 @@ public class BuffRingsPlugin extends Plugin
 
 	private void copyToUnsetKeys(String sourceKey, String... destKeys)
 	{
-		String sourceValue = configManager.getConfiguration(BuffRingsConfig.GROUP, sourceKey);
+		String sourceValue = configManager.getConfiguration(UltimateTimersConfig.GROUP, sourceKey);
 		if (sourceValue == null)
 		{
 			return;
@@ -320,9 +376,9 @@ public class BuffRingsPlugin extends Plugin
 
 		for (String destKey : destKeys)
 		{
-			if (configManager.getConfiguration(BuffRingsConfig.GROUP, destKey) == null)
+			if (configManager.getConfiguration(UltimateTimersConfig.GROUP, destKey) == null)
 			{
-				configManager.setConfiguration(BuffRingsConfig.GROUP, destKey, sourceValue);
+				configManager.setConfiguration(UltimateTimersConfig.GROUP, destKey, sourceValue);
 			}
 		}
 	}
@@ -343,16 +399,16 @@ public class BuffRingsPlugin extends Plugin
 
 	private void ensureEnumDefault(String keyName, Enum<?> defaultValue)
 	{
-		if (configManager.getConfiguration(BuffRingsConfig.GROUP, keyName) == null)
+		if (configManager.getConfiguration(UltimateTimersConfig.GROUP, keyName) == null)
 		{
-			configManager.setConfiguration(BuffRingsConfig.GROUP, keyName, defaultValue.name());
+			configManager.setConfiguration(UltimateTimersConfig.GROUP, keyName, defaultValue.name());
 		}
 	}
 
 	@Override
 	protected void shutDown()
 	{
-		for (BuffRingsGroupOverlay groupOverlay : groupOverlays.values())
+		for (UltimateTimersGroupOverlay groupOverlay : groupOverlays.values())
 		{
 			overlayManager.remove(groupOverlay);
 		}
@@ -649,7 +705,7 @@ public class BuffRingsPlugin extends Plugin
 
 		if (!sourceGroup.equals(DEFAULT_GROUP))
 		{
-			BuffRingsGroupOverlay sourceOverlay = groupOverlays.remove(sourceGroup);
+			UltimateTimersGroupOverlay sourceOverlay = groupOverlays.remove(sourceGroup);
 			if (sourceOverlay != null)
 			{
 				overlayManager.remove(sourceOverlay);
@@ -660,12 +716,12 @@ public class BuffRingsPlugin extends Plugin
 	@Subscribe
 	public void onOverlayMenuClicked(OverlayMenuClicked event)
 	{
-		if (!(event.getOverlay() instanceof BuffRingsGroupOverlay))
+		if (!(event.getOverlay() instanceof UltimateTimersGroupOverlay))
 		{
 			return;
 		}
 
-		BuffRingsGroupOverlay groupOverlay = (BuffRingsGroupOverlay) event.getOverlay();
+		UltimateTimersGroupOverlay groupOverlay = (UltimateTimersGroupOverlay) event.getOverlay();
 		String option = event.getEntry().getOption();
 
 		if ("Flip".equals(option))
@@ -792,11 +848,11 @@ public class BuffRingsPlugin extends Plugin
 		persistBuffOrder(other, buffRank);
 	}
 
-	private BuffRingsGroupOverlay ensureGroupOverlay(String groupName)
+	private UltimateTimersGroupOverlay ensureGroupOverlay(String groupName)
 	{
 		return groupOverlays.computeIfAbsent(groupName, name ->
 		{
-			BuffRingsGroupOverlay groupOverlay = new BuffRingsGroupOverlay(this, config, client, tooltipManager, name);
+			UltimateTimersGroupOverlay groupOverlay = new UltimateTimersGroupOverlay(this, config, client, tooltipManager, name);
 			overlayManager.add(groupOverlay);
 			return groupOverlay;
 		});
@@ -1108,8 +1164,8 @@ public class BuffRingsPlugin extends Plugin
 	}
 
 	@Provides
-	BuffRingsConfig provideConfig(ConfigManager configManager)
+	UltimateTimersConfig provideConfig(ConfigManager configManager)
 	{
-		return configManager.getConfig(BuffRingsConfig.class);
+		return configManager.getConfig(UltimateTimersConfig.class);
 	}
 }
