@@ -1,44 +1,82 @@
 # Ultimate Timers & Counters
 
-Configurable countdown timer overlays for buffs, debuffs, cooldowns, and other timed effects, plus
-count-based progress trackers like your current Slayer task.
+![Timer Infobox Example](screenshots/infobox-example.png)
+![Timer Infobox Example](screenshots/clock-example.png)
+![Timer Infobox Example](screenshots/bar-example.png)
 
-- **Buffs** - antifire/super antifire, stamina, divine potions (including the individual
-  attack/strength/defence/ranging/magic variants and bastion/battlemage), antipoison/antivenom,
-  goading potion, prayer regeneration, thrall, Tombs of Amascut supplies, and more
-- **Debuffs** - freeze spells, pickpocket stun, teleblock
-- **Cooldowns** - dragonfire shield, heal group, spellbook swap, staff of the dead special, and
-  other ability/item reuse cooldowns
-- **Other timers** - boss respawn (requires the core "Boss Timers" plugin) and an AFK logout
-  countdown
-- **Counters** - a Slayer task kill counter that works independently of the core Slayer plugin's
-  own infobox: it reads the kill count, task name, icon, points, master, and streak directly from
-  the game, so it keeps working even with Slayer's infobox turned off
+Configurable countdown timer overlays that displays timer progress visually.
 
-Drinking a combo potion (e.g. divine super combat) only shows one ring instead of one per
-sub-effect, and a ring is drawn at its last-seen peak duration so re-dosing mid-buff correctly
-resets the countdown.
+## Features
 
-## Requires RuneLite's core "Timers & Buffs" plugin to be enabled
+- Default settings match infobox shape and layout with a "clock" background indicator.
+- Enable or disable individual timers.
+  - Timers grouped into 5 categories with custom settings for each (list below).
+- Timers can flash when low to alert you.
+  - Flash time, color, and style are configurable per category (ex. buffs can flash red when low, debuffs (like being teleblocked) can flash green when low).
+- Timers can linger after they expire as a further reminder. No need for a separate plugin to remind you to cast another thrall or repot.
+  - Toggle and duration of lingering effect is configurable per category.
+- Timers can be regrouped and rearranged just like infoboxes by using *shift + right-click*.
+  - "Detach" removes that timer to its own group and lets you build a new group
+  - "Move up" and "Move down" change timers relative positions to each other within a group. The relative positions will be remembered so timers always appear in the order you expect.
+  - "Flip" toggles the timer stacking between horizontal and vertical
+- Customizeable text and icon settings
+  - Change position, size, font, color, etc.
+  - Toggleable tooltip text
+- Fully configurable size, shape, color, text settings and more 
+  - Change shape and size of the timer
+  - Color is configurable per timer. A global override is available too.
+  - Change fill style to go from a clock to a progress bar or anything in between
+- Debug settings that let you arrange all the timers and test your settings without needing to activate their effects in-game
 
-Most timers are read from RuneLite's own bundled **Timers & Buffs** plugin via the shared
-`InfoBoxManager`, rather than re-deriving each buff's remaining duration from scratch. If Timers &
-Buffs is disabled, those rings won't appear - there's nothing to read. When a future RuneLite
-update changes how a buff is tracked, Timers & Buffs gets updated right along with the client, and
-this plugin's rings stay correct automatically.
+## List of Supported Timers
 
-The Slayer task counter and the AFK logout timer don't depend on Timers & Buffs at all - they read
-directly from the game's own varps/varbits.
+Nearly all timers require the **"Timers & Buffs"** default plugin to be enabled.
 
-## Fully configurable layout and appearance
+- Buffs
+  - Antifire/super antifire
+  - Antivenom/poison
+  - Charge spell
+  - Divine potions (Bastion, Battlemage, Magiv, Ranging, Super Att, Super Combat, Super Def, Super Str)
+  - Goading potion
+  - Imbued heart
+  - Magic Imbue
+  - Menephite remedy
+  - Moonlight potion
+  - Necromancy spells (Shadow Veil, Ward of Arceuss, Death Charge, Mark of Darkness)
+  - Overload potions
+  - Prayer enhance potion
+  - Prayer regeneration potion
+  - Smouldering heart & gland
+  - Stamina potion
+  - Thralls
+  - ToA supplies
+  - Vengeance
+- Debuffs
+  - Freeze (Bind/Snare/Entangle, Ice spells)
+  - Pickpocket stun
+  - Teleblock
+- Cooldowns
+  - Dragonfire shield special attack
+  - Heal group
+  - Spellbook swap
+  - Staff of the dead special attack
+  - Surge potion cooldown
+  - Home and minigame telepoprt cooldowns
+- Other Timers
+  - AFK logout
+  - Boss mechanics (Abyssal Sire stun, Scurrius food pile, God Wars altar)
+  - Boss Respawn (requires the **"Boss Timers"** default plugin to be enabled)
+  - Cannon and broken cannon timers
+  - Delayed heal (from hunter meats)
+  - Farmer's affinity
+- Counters
+  - Slayer Task (requires the **"Slayer"** default plugin to be enabled)
 
-- Size, shape (square through circle via a corner-radius slider), border thickness, fill
-  direction, and background/border colors
-- Remaining-time text and an optional description label, each independently positioned (inside or
-  outside the ring) with shared font/color/border/shadow settings
-- Icon shown/hidden and independently positioned/sized
-- Per-timer colors, or a single override color for everything at once
-- Flashing and lingering (keep showing briefly after expiry) configured separately per category
-  (buffs/debuffs/cooldowns/other timers)
-- Drag a timer group to reposition it, drag one group onto another to merge them, or right-click
-  a timer to detach it into its own group
+  
+## Planned Features
+
+- Padding offset option for Time text, Description text, and icons
+- Fixed maximum so the 100% value is relative to a fixed value instead of the timers starting value
+  - For example, set the maximum to 2 minutes so the visual indicator shows 100% above 2:00, 75% at 1:30, and so on across all timers
+- Multiple custom shape presets, allowing you to use different shapes for different timers instead of forcing all timers to the same shape
+- Toggle to replace other plugins infoboxes so they don't need to be disabled manually

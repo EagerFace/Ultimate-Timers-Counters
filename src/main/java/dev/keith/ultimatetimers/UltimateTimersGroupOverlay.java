@@ -16,7 +16,7 @@ import java.awt.geom.RectangularShape;
 import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
 import java.time.Instant;
-import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import net.runelite.api.Client;
@@ -88,18 +88,16 @@ public class UltimateTimersGroupOverlay extends Overlay
 	}
 
 	private final UltimateTimersPlugin plugin;
-	private final UltimateTimersConfig config;
 	private final Client client;
 	private final TooltipManager tooltipManager;
 	private final String groupName;
 
 	private TrackedBuff hoveredBuff;
 
-	UltimateTimersGroupOverlay(UltimateTimersPlugin plugin, UltimateTimersConfig config, Client client,
-		TooltipManager tooltipManager, String groupName)
+	UltimateTimersGroupOverlay(UltimateTimersPlugin plugin, Client client, TooltipManager tooltipManager,
+		String groupName)
 	{
 		this.plugin = plugin;
-		this.config = config;
 		this.client = client;
 		this.tooltipManager = tooltipManager;
 		this.groupName = groupName;
@@ -134,42 +132,30 @@ public class UltimateTimersGroupOverlay extends Overlay
 			return null;
 		}
 
-		int width = config.ringWidth();
-		int height = config.ringHeight();
-		boolean showTimeText = config.showTimeText();
-		ElementPosition textPosition = config.textPosition();
-		boolean showDescription = config.showDescription();
-		ElementPosition descriptionPosition = config.descriptionPosition();
 		RingLayout layout = plugin.getGroupLayout(groupName);
-		int cornerRadius = config.cornerRadius();
-		FillDirection fillDirection = config.fillDirection();
-		boolean showIcon = config.showIcon();
-		ElementPosition iconPosition = config.iconPosition();
-		int iconSize = config.iconSize();
-		int ringBorderThickness = config.ringBorderThickness();
-		int gap = config.groupPadding();
-		boolean tooltipsEnabled = config.enableTooltips();
-
 		boolean flashPhaseOn = isFlashPhaseOn();
-		boolean forceFlashing = config.debugForceFlashing();
-		Map<TrackedBuff.Kind, FlashSettings> flashByKind = new EnumMap<>(TrackedBuff.Kind.class);
-		flashByKind.put(TrackedBuff.Kind.BUFF, new FlashSettings(config.enableFlash(), config.flashThresholdSeconds(),
-			config.flashColor(), config.flashForeground(), config.flashBackground(), config.flashBorder(),
-			config.flashText()));
-		flashByKind.put(TrackedBuff.Kind.DEBUFF, new FlashSettings(config.enableDebuffFlash(),
-			config.debuffFlashThresholdSeconds(), config.debuffFlashColor(), config.debuffFlashForeground(),
-			config.debuffFlashBackground(), config.debuffFlashBorder(), config.debuffFlashText()));
-		flashByKind.put(TrackedBuff.Kind.COOLDOWN, new FlashSettings(config.enableCooldownFlash(),
-			config.cooldownFlashThresholdSeconds(), config.cooldownFlashColor(), config.cooldownFlashForeground(),
-			config.cooldownFlashBackground(), config.cooldownFlashBorder(), config.cooldownFlashText()));
-		flashByKind.put(TrackedBuff.Kind.OTHER_TIMER, new FlashSettings(config.enableOtherTimerFlash(),
-			config.otherTimerFlashThresholdSeconds(), config.otherTimerFlashColor(),
-			config.otherTimerFlashForeground(), config.otherTimerFlashBackground(), config.otherTimerFlashBorder(),
-			config.otherTimerFlashText()));
-		// Counters (e.g. the slayer task kill count) have no flash settings of their own at all -
-		// permanently inert, and excluded from "Force flashing" below too.
-		flashByKind.put(TrackedBuff.Kind.COUNTER,
-			new FlashSettings(false, 0, Color.BLACK, false, false, false, false));
+		// Each category's flash settings now live only in the side panel's settings dialog
+		// (UltimateTimersPlugin's generic per-category accessors), not individual config methods.
+		Map<TrackedBuff.TimerCategory, FlashSettings> flashByCategory =
+			new HashMap<>();
+		for (TrackedBuff.TimerCategory timerCategory : plugin.getCategories())
+		{
+			flashByCategory.put(timerCategory, new FlashSettings(plugin.isFlashEnabled(timerCategory),
+				plugin.getFlashThresholdSeconds(timerCategory), plugin.getFlashColor(timerCategory),
+				plugin.isFlashForeground(timerCategory), plugin.isFlashBackground(timerCategory),
+				plugin.isFlashBorder(timerCategory), plugin.isFlashText(timerCategory)));
+		}
+		// Percentage-Based Color categories only: their full/half/empty colors, read once per frame.
+		Map<TrackedBuff.TimerCategory, Color[]> percentColorsByCategory =
+			new HashMap<>();
+		for (TrackedBuff.TimerCategory timerCategory : plugin.getCategories())
+		{
+			if (plugin.getColorStyle(timerCategory) == ColorStyle.PERCENTAGE)
+			{
+				percentColorsByCategory.put(timerCategory, new Color[]{plugin.getPercentColorFull(timerCategory),
+					plugin.getPercentColorHalf(timerCategory), plugin.getPercentColorEmpty(timerCategory)});
+			}
+		}
 
 		graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 		// Item icons are native 36x32 sprites; without this hint, scaling them to the configured
@@ -177,105 +163,169 @@ public class UltimateTimersGroupOverlay extends Overlay
 		// icon drawn 1:1 in the inventory or scaled by RuneLite's own infobox rendering.
 		graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
 		graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
-		Font font = config.textFont().getFont();
-		graphics.setFont(font);
-		FontMetrics fm = graphics.getFontMetrics(font);
-
-		// How much extra space to reserve around the ring itself for elements positioned outside
-		// it. Text's outside-left/outside-right reservation uses a fixed stand-in string so the
-		// cell's overall size (and therefore the whole group's layout) doesn't jitter as the
-		// digit count of the live countdown changes tick to tick.
-		int textReserveWidth = fm.stringWidth(TEXT_WIDTH_RESERVATION);
-		int textReserveHeight = fm.getHeight();
-
-		// Unlike the countdown text, the description doesn't change tick to tick, but it does vary
-		// buff to buff - reserve enough width for the longest label currently in this group so the
-		// cell size (and the whole group's layout) stays uniform across its members.
-		int descriptionReserveHeight = fm.getHeight();
-		int descriptionReserveWidth = 0;
-		if (showDescription)
-		{
-			for (ActiveBuffDisplay display : displays)
-			{
-				descriptionReserveWidth = Math.max(descriptionReserveWidth, fm.stringWidth(display.getBuff().getLabel()));
-			}
-		}
-
-		int marginTop = Math.max(Math.max(
-			showTimeText && textPosition == ElementPosition.ABOVE ? textReserveHeight + ELEMENT_GAP : 0,
-			showIcon && iconPosition == ElementPosition.ABOVE ? iconSize + ELEMENT_GAP : 0),
-			showDescription && descriptionPosition == ElementPosition.ABOVE ? descriptionReserveHeight + ELEMENT_GAP : 0);
-		int marginBottom = Math.max(Math.max(
-			showTimeText && textPosition == ElementPosition.BELOW ? textReserveHeight + ELEMENT_GAP : 0,
-			showIcon && iconPosition == ElementPosition.BELOW ? iconSize + ELEMENT_GAP : 0),
-			showDescription && descriptionPosition == ElementPosition.BELOW ? descriptionReserveHeight + ELEMENT_GAP : 0);
-		int marginLeft = Math.max(Math.max(
-			showTimeText && textPosition == ElementPosition.OUTSIDE_LEFT ? textReserveWidth + ELEMENT_GAP : 0,
-			showIcon && iconPosition == ElementPosition.OUTSIDE_LEFT ? iconSize + ELEMENT_GAP : 0),
-			showDescription && descriptionPosition == ElementPosition.OUTSIDE_LEFT ? descriptionReserveWidth + ELEMENT_GAP : 0);
-		int marginRight = Math.max(Math.max(
-			showTimeText && textPosition == ElementPosition.OUTSIDE_RIGHT ? textReserveWidth + ELEMENT_GAP : 0,
-			showIcon && iconPosition == ElementPosition.OUTSIDE_RIGHT ? iconSize + ELEMENT_GAP : 0),
-			showDescription && descriptionPosition == ElementPosition.OUTSIDE_RIGHT ? descriptionReserveWidth + ELEMENT_GAP : 0);
-
-		int cellWidth = marginLeft + width + marginRight;
-		int cellHeight = marginTop + height + marginBottom;
 
 		Instant now = Instant.now();
 		Rectangle overlayBounds = getBounds();
 		Point mouse = new Point(client.getMouseCanvasPosition().getX(), client.getMouseCanvasPosition().getY());
 
-		// Items fill one row/column up to wrapAfter, then wrap into the next row/column - same
-		// idea as how RuneLite's own infobox panel wraps instead of becoming one long stack.
-		// wrapAfter comes from this group's own resized preferredSize (drag an edge to resize,
-		// same interaction as the infobox panel) rather than a single global setting, so each
-		// group remembers its own wrap width/height. Unresized groups (preferredSize still null)
-		// behave exactly as before - one unbroken row/column.
+		// Size/shape/text/icon settings are per-category now, so timers in the same group can be
+		// different sizes/shapes - a true flow layout (advance a cursor by each item's own cell
+		// size, wrap when it would overflow the group's resized bounds) rather than a uniform
+		// grid. Unresized groups (preferredSize still null) behave as before - one unbroken
+		// row/column, since there's no bound to wrap against.
 		Dimension preferredSize = getPreferredSize();
-		int wrapAfter;
-		if (preferredSize == null)
-		{
-			wrapAfter = displays.size();
-		}
-		else if (layout == RingLayout.VERTICAL)
-		{
-			wrapAfter = Math.max(1, (preferredSize.height + gap) / (cellHeight + gap));
-		}
-		else
-		{
-			wrapAfter = Math.max(1, (preferredSize.width + gap) / (cellWidth + gap));
-		}
+		int availableWidth = preferredSize != null ? preferredSize.width : Integer.MAX_VALUE;
+		int availableHeight = preferredSize != null ? preferredSize.height : Integer.MAX_VALUE;
 
-		int itemsPerLine = Math.min(wrapAfter, displays.size());
-		int numLines = (int) Math.ceil(displays.size() / (double) wrapAfter);
+		int cursorX = 0;
+		int cursorY = 0;
+		int lineExtent = 0;
+		int totalWidth = 0;
+		int totalHeight = 0;
 
-		for (int i = 0; i < displays.size(); i++)
+		for (ActiveBuffDisplay display : displays)
 		{
-			ActiveBuffDisplay display = displays.get(i);
-			int indexInLine = i % wrapAfter;
-			int lineIndex = i / wrapAfter;
-			int x = layout == RingLayout.VERTICAL ? lineIndex * (cellWidth + gap) : indexInLine * (cellWidth + gap);
-			int y = layout == RingLayout.VERTICAL ? indexInLine * (cellHeight + gap) : lineIndex * (cellHeight + gap);
+			TrackedBuff buff = display.getBuff();
+			TrackedBuff.TimerCategory category = plugin.getTimerCategory(buff);
+			if (!flashByCategory.containsKey(category))
+			{
+				// Moved to Unmapped (or its category deleted) since this frame's displays were built.
+				continue;
+			}
+
+			int width = plugin.getRingWidth(category);
+			int height = plugin.getRingHeight(category);
+			int cornerRadius = plugin.getCornerRadius(category);
+			int ringBorderThickness = plugin.getRingBorderThickness(category);
+			FillDirection fillDirection = plugin.getFillDirection(category);
+			int gap = plugin.getGroupPadding(category);
+			boolean showTimeText = plugin.isShowTimeText(category);
+			boolean showDescription = plugin.isShowDescription(category);
+			boolean showIcon = plugin.isShowIcon(category);
+			boolean tooltipsEnabled = plugin.isTooltipsEnabled(category);
+			ElementPosition textPosition = plugin.getTextPosition(category);
+			ElementPosition descriptionPosition = plugin.getDescriptionPosition(category);
+			ElementPosition iconPosition = plugin.getIconPosition(category);
+			int iconSize = plugin.getIconSize(category);
+			int textOffset = plugin.getTextOffset(category);
+			int descriptionOffset = plugin.getDescriptionOffset(category);
+			int iconOffset = plugin.getIconOffset(category);
+
+			Font font = plugin.getTextFont(category).getFont();
+			graphics.setFont(font);
+			FontMetrics fm = graphics.getFontMetrics(font);
+
+			// Text's outside-left/outside-right reservation uses a fixed stand-in string so this
+			// item's cell size doesn't jitter as the digit count of its live countdown changes
+			// tick to tick.
+			int textReserveWidth = fm.stringWidth(TEXT_WIDTH_RESERVATION);
+			int textReserveHeight = fm.getHeight();
+			String description = buff.getLabel();
+			int descriptionWidth = fm.stringWidth(description);
+			int descriptionHeight = fm.getHeight();
+
+			int marginTop = Math.max(Math.max(
+				showTimeText && textPosition == ElementPosition.ABOVE ? textReserveHeight + ELEMENT_GAP : 0,
+				showIcon && iconPosition == ElementPosition.ABOVE ? iconSize + ELEMENT_GAP : 0),
+				showDescription && descriptionPosition == ElementPosition.ABOVE ? descriptionHeight + ELEMENT_GAP : 0);
+			int marginBottom = Math.max(Math.max(
+				showTimeText && textPosition == ElementPosition.BELOW ? textReserveHeight + ELEMENT_GAP : 0,
+				showIcon && iconPosition == ElementPosition.BELOW ? iconSize + ELEMENT_GAP : 0),
+				showDescription && descriptionPosition == ElementPosition.BELOW ? descriptionHeight + ELEMENT_GAP : 0);
+			int marginLeft = Math.max(Math.max(
+				showTimeText && textPosition == ElementPosition.OUTSIDE_LEFT ? textReserveWidth + ELEMENT_GAP : 0,
+				showIcon && iconPosition == ElementPosition.OUTSIDE_LEFT ? iconSize + ELEMENT_GAP : 0),
+				showDescription && descriptionPosition == ElementPosition.OUTSIDE_LEFT ? descriptionWidth + ELEMENT_GAP : 0);
+			int marginRight = Math.max(Math.max(
+				showTimeText && textPosition == ElementPosition.OUTSIDE_RIGHT ? textReserveWidth + ELEMENT_GAP : 0,
+				showIcon && iconPosition == ElementPosition.OUTSIDE_RIGHT ? iconSize + ELEMENT_GAP : 0),
+				showDescription && descriptionPosition == ElementPosition.OUTSIDE_RIGHT ? descriptionWidth + ELEMENT_GAP : 0);
+
+			// An offset text or icon can stick out past the ring (or further out than an outside position's
+			// usual gap), so reserve room for it rather than letting it overlap the next timer.
+			// Texts without an offset keep the original rules above, so existing layouts don't move.
+			int[] margins = {marginTop, marginBottom, marginLeft, marginRight};
+			if (showTimeText && textOffset != 0)
+			{
+				reserveForOffsetElement(margins, width, height, textReserveWidth, textReserveHeight, textPosition,
+					textOffset);
+			}
+			if (showIcon && iconOffset != 0)
+			{
+				reserveForOffsetElement(margins, width, height, iconSize, iconSize, iconPosition, iconOffset);
+			}
+			if (showDescription && descriptionOffset != 0)
+			{
+				reserveForOffsetElement(margins, width, height, descriptionWidth, descriptionHeight,
+					descriptionPosition, descriptionOffset);
+			}
+			marginTop = margins[0];
+			marginBottom = margins[1];
+			marginLeft = margins[2];
+			marginRight = margins[3];
+
+			int itemCellWidth = marginLeft + width + marginRight;
+			int itemCellHeight = marginTop + height + marginBottom;
+
+			int placeX;
+			int placeY;
+			if (layout == RingLayout.VERTICAL)
+			{
+				if (cursorY > 0 && cursorY + itemCellHeight > availableHeight)
+				{
+					cursorY = 0;
+					cursorX += lineExtent + gap;
+					lineExtent = 0;
+				}
+				placeX = cursorX;
+				placeY = cursorY;
+				cursorY += itemCellHeight + gap;
+				lineExtent = Math.max(lineExtent, itemCellWidth);
+			}
+			else
+			{
+				if (cursorX > 0 && cursorX + itemCellWidth > availableWidth)
+				{
+					cursorX = 0;
+					cursorY += lineExtent + gap;
+					lineExtent = 0;
+				}
+				placeX = cursorX;
+				placeY = cursorY;
+				cursorX += itemCellWidth + gap;
+				lineExtent = Math.max(lineExtent, itemCellHeight);
+			}
+			totalWidth = Math.max(totalWidth, placeX + itemCellWidth);
+			totalHeight = Math.max(totalHeight, placeY + itemCellHeight);
 
 			long remainingMillis = display.getRemainingMillis(now);
 			long peak = display.getPeakMillis();
-			double fraction = peak <= 0 ? 0 : Math.min(1.0, (double) remainingMillis / peak);
+			// With a fixed maximum, the fill (and percentage color) is measured against it instead of
+			// the timer's own starting length, so e.g. with 2:00 everything over 2:00 shows full.
+			long fullMillis = peak;
+			if (!buff.isKillCounter() && plugin.isFixedMaximumEnabled(category))
+			{
+				fullMillis = plugin.getFixedMaximumSeconds(category) * 1000L;
+			}
+			double fraction = fullMillis <= 0 ? 0 : Math.min(1.0, (double) remainingMillis / fullMillis);
 			int seconds = (int) Math.round(remainingMillis / 1000.0);
 
-			TrackedBuff.Kind kind = display.getBuff().getKind();
-			FlashSettings flash = flashByKind.get(kind);
-			boolean useFlash = kind != TrackedBuff.Kind.COUNTER && flashPhaseOn && flash.enabled
-				&& (forceFlashing || seconds <= flash.thresholdSeconds);
-			Color foreground = (useFlash && flash.foreground) ? flash.color : display.getColor();
-			Color background = (useFlash && flash.background) ? flash.color : config.backgroundColor();
-			Color ringBorder = (useFlash && flash.border) ? flash.color : config.borderColor();
-			Color textColor = (useFlash && flash.text) ? flash.color : config.textColor();
+			FlashSettings flash = flashByCategory.get(category);
+			boolean useFlash = flashPhaseOn && flash.enabled
+				&& (plugin.isForceFlashEnabled(category) || seconds <= flash.thresholdSeconds);
+			Color[] percentColors = percentColorsByCategory.get(category);
+			Color baseColor = percentColors == null ? display.getColor()
+				: UltimateTimersPlugin.percentageColor(percentColors[0], percentColors[1], percentColors[2], fraction);
+			Color foreground = (useFlash && flash.foreground) ? flash.color : baseColor;
+			Color background = (useFlash && flash.background) ? flash.color : plugin.getBackgroundColor(category);
+			Color ringBorder = (useFlash && flash.border) ? flash.color : plugin.getBorderColor(category);
+			Color textColor = (useFlash && flash.text) ? flash.color : plugin.getTextColor(category);
 
-			TextStyle textStyle = new TextStyle(textColor, config.textBorderEnabled(), config.textBorderColor(),
-				config.textShadowEnabled());
+			TextStyle textStyle = new TextStyle(textColor, plugin.isTextBorderEnabled(category),
+				plugin.getTextBorderColor(category), plugin.isTextShadowEnabled(category));
 
-			int ringX = x + marginLeft;
-			int ringY = y + marginTop;
+			int ringX = placeX + marginLeft;
+			int ringY = placeY + marginTop;
 
 			drawRingShape(graphics, ringX, ringY, width, height, fraction, foreground, ringBorder, background,
 				ringBorderThickness, cornerRadius, fillDirection);
@@ -284,50 +334,41 @@ public class UltimateTimersGroupOverlay extends Overlay
 			{
 				Point p = resolveElementPosition(ringX, ringY, width, height, iconSize, iconSize, iconPosition,
 					ELEMENT_GAP);
+				applyOffset(p, iconPosition, iconOffset);
 				graphics.drawImage(display.getIcon(), p.x, p.y, iconSize, iconSize, null);
 			}
 
 			if (showTimeText)
 			{
-				String text = display.getBuff().isKillCounter()
-					? String.valueOf(seconds)
-					: formatSeconds(seconds);
+				String text = buff.isKillCounter() ? String.valueOf(seconds) : formatSeconds(seconds);
 				int textWidth = fm.stringWidth(text);
 				int textHeight = fm.getHeight();
 				Point p = resolveElementPosition(ringX, ringY, width, height, textWidth, textHeight, textPosition,
 					ELEMENT_GAP);
+				applyOffset(p, textPosition, textOffset);
 				drawStyledText(graphics, text, p.x, p.y + fm.getAscent(), textStyle);
 			}
 
 			if (showDescription)
 			{
-				String description = display.getBuff().getLabel();
-				int descriptionWidth = fm.stringWidth(description);
-				int descriptionHeight = fm.getHeight();
 				Point p = resolveElementPosition(ringX, ringY, width, height, descriptionWidth, descriptionHeight,
 					descriptionPosition, ELEMENT_GAP);
+				applyOffset(p, descriptionPosition, descriptionOffset);
 				drawStyledText(graphics, description, p.x, p.y + fm.getAscent(), textStyle);
 			}
 
 			Rectangle ringRect = new Rectangle(overlayBounds.x + ringX, overlayBounds.y + ringY, width, height);
 			if (ringRect.contains(mouse))
 			{
-				hoveredBuff = display.getBuff();
+				hoveredBuff = buff;
 				if (tooltipsEnabled)
 				{
-					tooltipManager.add(new Tooltip(display.getBuff().isKillCounter()
-						? slayerTaskTooltip(display.getBuff())
-						: display.getBuff().getLabel()));
+					tooltipManager.add(new Tooltip(buff.isKillCounter()
+						? slayerTaskTooltip(buff)
+						: buff.getLabel() + " (" + plugin.getCategoryName(category) + ")"));
 				}
 			}
 		}
-
-		int totalWidth = layout == RingLayout.VERTICAL
-			? numLines * cellWidth + (numLines - 1) * gap
-			: itemsPerLine * cellWidth + (itemsPerLine - 1) * gap;
-		int totalHeight = layout == RingLayout.VERTICAL
-			? itemsPerLine * cellHeight + (itemsPerLine - 1) * gap
-			: numLines * cellHeight + (numLines - 1) * gap;
 
 		return new Dimension(totalWidth, totalHeight);
 	}
@@ -614,6 +655,66 @@ public class UltimateTimersGroupOverlay extends Overlay
 			default:
 				return new Point(ringX + (ringW - elemW) / 2, ringY + (ringH - elemH) / 2);
 		}
+	}
+
+	/**
+	 * Moves p by offset pixels in the direction its position points: vertically for
+	 * Top/Bottom/Above/Below, horizontally for Left/Right/Outside left/Outside right, and both
+	 * for the corners. Center has no direction, so it doesn't move.
+	 */
+	private static void applyOffset(Point p, ElementPosition position, int offset)
+	{
+		p.translate(offsetDirectionX(position) * offset, offsetDirectionY(position) * offset);
+	}
+
+	private static int offsetDirectionX(ElementPosition position)
+	{
+		switch (position)
+		{
+			case LEFT:
+			case OUTSIDE_LEFT:
+			case TOP_LEFT:
+			case BOTTOM_LEFT:
+				return -1;
+			case RIGHT:
+			case OUTSIDE_RIGHT:
+			case TOP_RIGHT:
+			case BOTTOM_RIGHT:
+				return 1;
+			default:
+				return 0;
+		}
+	}
+
+	private static int offsetDirectionY(ElementPosition position)
+	{
+		switch (position)
+		{
+			case TOP:
+			case ABOVE:
+			case TOP_LEFT:
+			case TOP_RIGHT:
+				return -1;
+			case BOTTOM:
+			case BELOW:
+			case BOTTOM_LEFT:
+			case BOTTOM_RIGHT:
+				return 1;
+			default:
+				return 0;
+		}
+	}
+
+	/** Grows margins (top, bottom, left, right) to fit an offset element placed around a ring at 0,0. */
+	private void reserveForOffsetElement(int[] margins, int ringW, int ringH, int elemW, int elemH,
+		ElementPosition position, int offset)
+	{
+		Point p = resolveElementPosition(0, 0, ringW, ringH, elemW, elemH, position, ELEMENT_GAP);
+		applyOffset(p, position, offset);
+		margins[0] = Math.max(margins[0], -p.y);
+		margins[1] = Math.max(margins[1], p.y + elemH - ringH);
+		margins[2] = Math.max(margins[2], -p.x);
+		margins[3] = Math.max(margins[3], p.x + elemW - ringW);
 	}
 
 	private void drawStyledText(Graphics2D graphics, String text, int x, int y, TextStyle style)
